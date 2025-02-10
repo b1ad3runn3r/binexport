@@ -105,29 +105,29 @@ if(APPLE)
   # Not using find_library(), as static-lib search might be enforced in
   # calling project.
   _ida_get_libpath_suffixes(_ida64_x64_suffixes "x64_mac_clang_64")
-  find_path(IdaSdk_LIBPATH64_X64 libida64.dylib
+  find_path(IdaSdk_LIBPATH64_X64 libida.dylib
     PATHS "${IdaSdk_DIR}/lib" PATH_SUFFIXES ${_ida64_x64_suffixes}
     NO_DEFAULT_PATH REQUIRED
   )
   _ida_get_libpath_suffixes(_ida64_arm64_suffixes "arm64_mac_clang_64")
-  find_path(IdaSdk_LIBPATH64_ARM64 libida64.dylib
+  find_path(IdaSdk_LIBPATH64_ARM64 libida.dylib
     PATHS "${IdaSdk_DIR}/lib" PATH_SUFFIXES ${_ida64_arm64_suffixes}
     NO_DEFAULT_PATH REQUIRED
   )
   if(NOT TARGET ida64_universal)
     set(_ida64_universal_lib
-      "${CMAKE_CURRENT_BINARY_DIR}/libida64_universal.dylib"
+      "${CMAKE_CURRENT_BINARY_DIR}/libida_universal.dylib"
       CACHE INTERNAL ""
     )
     # Create a new "universal" library to allow the linker to select the
     # correct one per architecture. Ideally, Hex Rays would just compile
     # libida64.dylib as a universal bundle.
     add_custom_target(ida64_universal
-      DEPENDS "${IdaSdk_LIBPATH64_ARM64}/libida64.dylib"
-              "${IdaSdk_LIBPATH64_X64}/libida64.dylib"
+      DEPENDS "${IdaSdk_LIBPATH64_ARM64}/libida.dylib"
+              "${IdaSdk_LIBPATH64_X64}/libida.dylib"
       BYPRODUCTS "${_ida64_universal_lib}"
-      COMMAND lipo -create "${IdaSdk_LIBPATH64_ARM64}/libida64.dylib"
-                           "${IdaSdk_LIBPATH64_X64}/libida64.dylib"
+      COMMAND lipo -create "${IdaSdk_LIBPATH64_ARM64}/libida.dylib"
+                           "${IdaSdk_LIBPATH64_X64}/libida.dylib"
                    -output "${_ida64_universal_lib}"
     )
   endif()
@@ -137,57 +137,19 @@ if(APPLE)
     IMPORTED_LOCATION "${_ida64_universal_lib}"
   )
 
-  _ida_get_libpath_suffixes(_ida32_x64_suffixes "x64_mac_clang_32")
-  find_path(IdaSdk_LIBPATH32_X64 libida.dylib
-    PATHS "${IdaSdk_DIR}/lib" PATH_SUFFIXES ${_ida32_x64_suffixes}
-    NO_DEFAULT_PATH REQUIRED
-  )
-  _ida_get_libpath_suffixes(_ida32_arm64_suffixes "arm64_mac_clang_32")
-  find_path(IdaSdk_LIBPATH32_ARM64 libida.dylib
-    PATHS "${IdaSdk_DIR}/lib" PATH_SUFFIXES ${_ida32_arm64_suffixes}
-    NO_DEFAULT_PATH REQUIRED
-  )
-  if(NOT TARGET ida32_universal)
-    set(_ida32_universal_lib
-      "${CMAKE_CURRENT_BINARY_DIR}/libida32_universal.dylib"
-      CACHE INTERNAL ""
-    )
-    add_custom_target(ida32_universal
-      DEPENDS "${IdaSdk_LIBPATH32_ARM64}/libida.dylib"
-              "${IdaSdk_LIBPATH32_X64}/libida.dylib"
-      BYPRODUCTS "${_ida32_universal_lib}"
-      COMMAND lipo -create "${IdaSdk_LIBPATH32_ARM64}/libida.dylib"
-                           "${IdaSdk_LIBPATH32_X64}/libida.dylib"
-                   -output "${_ida32_universal_lib}"
-    )
-  endif()
-  add_library(ida32 SHARED IMPORTED)
-  add_dependencies(ida32 ida32_universal)
-  set_target_properties(ida32 PROPERTIES
-    IMPORTED_LOCATION "${_ida32_universal_lib}"
-  )
 elseif(UNIX)
   set(IdaSdk_PLATFORM __LINUX__)
 
   _ida_get_libpath_suffixes(_ida64_suffixes "x64_linux_gcc_64")
-  find_path(IdaSdk_LIBPATH64 libida64.so
+  find_path(IdaSdk_LIBPATH64 libida.so
     PATHS "${IdaSdk_DIR}/lib" PATH_SUFFIXES ${_ida64_suffixes}
     NO_DEFAULT_PATH REQUIRED
   )
   add_library(ida64 SHARED IMPORTED)
   set_target_properties(ida64 PROPERTIES
-    IMPORTED_LOCATION "${IdaSdk_LIBPATH64}/libida64.so"
+    IMPORTED_LOCATION "${IdaSdk_LIBPATH64}/libida.so"
   )
 
-  _ida_get_libpath_suffixes(_ida32_suffixes "x64_linux_gcc_32")
-  find_path(IdaSdk_LIBPATH32 libida.so
-    PATHS "${IdaSdk_DIR}/lib" PATH_SUFFIXES ${_ida32_suffixes}
-    NO_DEFAULT_PATH REQUIRED
-  )
-  add_library(ida32 SHARED IMPORTED)
-  set_target_properties(ida32 PROPERTIES
-    IMPORTED_LOCATION "${IdaSdk_LIBPATH32}/libida.so"
-  )
 elseif(WIN32)
   set(IdaSdk_PLATFORM __NT__)
 
@@ -200,16 +162,6 @@ elseif(WIN32)
   set_target_properties(ida64 PROPERTIES IMPORTED_LOCATION "${IdaSdk_LIB64}")
   set_target_properties(ida64 PROPERTIES IMPORTED_IMPLIB "${IdaSdk_LIB64}")
 
-  _ida_get_libpath_suffixes(_ida32_suffixes "x64_win_vc_32")
-  find_library(IdaSdk_LIB32 ida
-    PATHS "${IdaSdk_DIR}/lib" PATH_SUFFIXES ${_ida32_suffixes}
-    NO_DEFAULT_PATH REQUIRED
-  )
-  add_library(ida32 SHARED IMPORTED)
-  set_target_properties(ida32 PROPERTIES IMPORTED_LOCATION "${IdaSdk_LIB32}")
-  set_target_properties(ida32 PROPERTIES IMPORTED_IMPLIB "${IdaSdk_LIB32}")
-else()
-  message(FATAL_ERROR "Unsupported system type: ${CMAKE_SYSTEM_NAME}")
 endif()
 
 function(_ida_common_target_settings t ea64)
@@ -258,8 +210,6 @@ function(_ida_plugin name ea64 link_script)  # ARGN contains sources
   set_target_properties(${t} PROPERTIES PREFIX "" SUFFIX "")
   if(ea64)
     target_link_libraries(${t} ida64)
-  else()
-    target_link_libraries(${t} ida32)
   endif()
   if(UNIX)
     if(APPLE)
@@ -310,9 +260,6 @@ function(add_ida_loader name)
   cmake_parse_arguments(PARSE_ARGV 1 opt "NOEA32;NOEA64" "" "")
   _ida_check_bitness(opt_NOEA32 opt_NOEA64)
 
-  if(NOT opt_NOEA32)
-    _ida_plugin(${name} FALSE ldr/exports.def ${opt_UNPARSED_ARGUMENTS})
-  endif()
   if(NOT opt_NOEA64)
     _ida_plugin(${name} TRUE ldr/exports.def ${opt_UNPARSED_ARGUMENTS})
   endif()
